@@ -4,89 +4,59 @@ import RightSidebar from "../components/RightSidebar";
 import { fetchUserProfile } from "../services/userService";
 
 function AppLayout({ children }) {
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDark, setIsDark] = useState(true);
+  const [profile, setProfile] = useState(null);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadProfile() {
-      try {
-        setLoading(true);
-        setError("");
-        const data = await fetchUserProfile();
-        if (isMounted) {
-          setProfile(data);
-        }
-      } catch (err) {
-        console.error("Failed to load profile:", err);
-        if (isMounted) {
-          setError("Failed to load profile. Some account info may be missing.");
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadProfile();
-
-    return () => {
-      isMounted = false;
-    };
+    fetchUserProfile()
+      .then((data) => setProfile(data))
+      .catch((err) => console.error("Profile load error:", err));
   }, []);
 
-  // 🔥 This is now the ONLY place we touch the `dark` class
   useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    document.documentElement.classList.toggle("dark", isDark);
   }, [isDark]);
 
-  const handleToggleTheme = () => {
-    setIsDark((prev) => !prev);
-  };
+  const toggleTheme = () => setIsDark((prev) => !prev);
 
-  // inject theme props into the active page (CompilerPage, ProfilePage, etc.)
-  const childrenWithProps =
+  const childWithProps =
     React.isValidElement(children)
       ? React.cloneElement(children, {
           isDark,
-          onToggleTheme: handleToggleTheme,
+          onToggleTheme: toggleTheme,
+          profile,
         })
       : children;
 
-  if (loading && !profile) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-200">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/80 px-4 py-3 text-sm">
-          Loading workspace...
-        </div>
-      </div>
-    );
-  }
-
   return (
-    // 🚫 no more `className={isDark ? "dark" : ""}` wrapper
-  <div className="flex min-h-screen bg-slate-50 text-slate-900 transition-colors duration-300 dark:bg-gradient-to-b dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:text-slate-50">
-      {/* Main content */}
-      <div className="flex-1 flex flex-col">
-        {error && (
-          <div className="mx-4 mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-100">
-            {error}
-          </div>
-        )}
+    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-900 dark:text-slate-50 relative">
+      {/* Mobile burger */}
+      <button
+        onClick={() => setIsSidebarOpen(true)}
+        className="z-30 fixed top-4 left-4 lg:hidden inline-flex items-center justify-center rounded-full border border-slate-300 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-100"
+      >
+        <span className="mr-1">Menu</span>
+        ☰
+      </button>
 
-        {childrenWithProps}
+      {/* MAIN CONTENT */}
+      <div
+        className="
+          mx-auto max-w-6xl
+          px-3 py-4 sm:px-4 lg:py-8
+          lg:mr-80       /* ⬅️ reserve ~20rem for sidebar on desktop */
+        "
+      >
+        {childWithProps}
       </div>
 
-      {/* Right sidebar */}
-      <RightSidebar profile={profile} />
+      {/* FIXED RIGHT SIDEBAR */}
+      <RightSidebar
+        profile={profile}
+        isMobileOpen={isSidebarOpen}
+        onMobileClose={() => setIsSidebarOpen(false)}
+      />
     </div>
   );
 }

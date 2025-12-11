@@ -33,7 +33,7 @@ function RightSidebar({ profile, isMobileOpen = false, onMobileClose }) {
           transition-transform duration-300 ease-out
           dark:border-slate-800 dark:bg-slate-950/95 dark:text-slate-50
           ${isMobileOpen ? "translate-x-0" : "translate-x-full"}
-          lg:static lg:h-auto lg:translate-x-0 lg:border-l lg:bg-white/80 lg:dark:bg-slate-950/90
+          lg:translate-x-0
           ${widthClass}
         `}
       >
@@ -46,7 +46,7 @@ function RightSidebar({ profile, isMobileOpen = false, onMobileClose }) {
           {isCollapsed ? "‹" : "›"}
         </button>
 
-        {/* Mobile close button (inside drawer) */}
+        {/* Mobile close button */}
         <button
           type="button"
           onClick={onMobileClose}
@@ -56,8 +56,8 @@ function RightSidebar({ profile, isMobileOpen = false, onMobileClose }) {
         </button>
 
         <div className={isCollapsed ? "hidden lg:block h-full px-1 py-4" : "h-full px-4 py-4"}>
-          {/* Collapsed view (desktop) */}
           {isCollapsed ? (
+            // Collapsed desktop view: just avatar
             <div className="flex flex-col items-center gap-4">
               <Link to="/profile" title="Profile">
                 {photoURL ? (
