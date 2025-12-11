@@ -52,8 +52,9 @@ module.exports = async (req, res) => {
     });
   } catch (err) {
     console.error("Piston error:", err.response?.data || err.message);
-    res
-      .status(500)
-      .json({ success: false, error: "Failed to execute code on server" });
+    res.status(500).json({
+      success: false,
+      error: err.message || "Failed to execute code on server",
+    });
   }
 };
