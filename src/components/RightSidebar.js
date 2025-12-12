@@ -2,8 +2,14 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { auth } from "../firebase";
+import ProjectWorkspace from "./projects/ProjectWorkspace";
 
-function RightSidebar({ profile, isMobileOpen = false, onMobileClose }) {
+function RightSidebar({
+  profile,
+  isMobileOpen = false,
+  onMobileClose,
+  onOpenFile          // 👈 comes from AppLayout
+}) {
   const [isCollapsed, setIsCollapsed] = useState(false); // desktop only
   const location = useLocation();
 
@@ -55,10 +61,16 @@ function RightSidebar({ profile, isMobileOpen = false, onMobileClose }) {
           ✕
         </button>
 
-        <div className={isCollapsed ? "hidden lg:block h-full px-1 py-4" : "h-full px-4 py-4"}>
+        <div
+          className={
+            isCollapsed
+              ? "hidden lg:block h-full px-1 py-4"
+              : "flex h-full flex-col px-4 py-4"
+          }
+        >
           {isCollapsed ? (
             // Collapsed desktop view: just avatar
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex h-full flex-col items-center gap-4">
               <Link to="/profile" title="Profile">
                 {photoURL ? (
                   <img
@@ -75,66 +87,75 @@ function RightSidebar({ profile, isMobileOpen = false, onMobileClose }) {
             </div>
           ) : (
             <>
-              {/* Profile summary */}
-              <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/70">
-                {photoURL ? (
-                  <img
-                    src={photoURL}
-                    alt="avatar"
-                    className="h-10 w-10 rounded-full border border-slate-200 object-cover dark:border-slate-700"
-                  />
-                ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200">
-                    {displayName.charAt(0).toUpperCase()}
-                  </div>
-                )}
+              {/* TOP: profile + nav */}
+              <div className="shrink-0">
+                {/* Profile summary */}
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/70">
+                  {photoURL ? (
+                    <img
+                      src={photoURL}
+                      alt="avatar"
+                      className="h-10 w-10 rounded-full border border-slate-200 object-cover dark:border-slate-700"
+                    />
+                  ) : (
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200">
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
 
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    {displayName}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
+                      {displayName}
+                    </p>
+                    <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                      {email}
+                    </p>
+                    <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      Role: {role}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Navigation */}
+                <div className="mt-5 space-y-1 text-xs text-slate-700 dark:text-slate-300">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                    Account
                   </p>
-                  <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                    {email}
-                  </p>
-                  <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                    Role: {role}
-                  </span>
+
+                  <Link
+                    to="/profile"
+                    className={`flex items-center justify-between rounded-lg px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-900 ${
+                      location.pathname === "/profile"
+                        ? "bg-slate-100 text-indigo-600 dark:bg-slate-900/80 dark:text-indigo-300"
+                        : ""
+                    }`}
+                  >
+                    <span>Profile</span>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                      Edit
+                    </span>
+                  </Link>
+
+                  <Link
+                    to="/compiler"
+                    className={`flex items-center justify-between rounded-lg px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-900 ${
+                      location.pathname === "/compiler"
+                        ? "bg-slate-100 text-indigo-600 dark:bg-slate-900/80 dark:text-indigo-300"
+                        : ""
+                    }`}
+                  >
+                    <span>Compiler</span>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                      Sandbox
+                    </span>
+                  </Link>
                 </div>
               </div>
 
-              {/* Navigation */}
-              <div className="mt-5 space-y-1 text-xs text-slate-700 dark:text-slate-300">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                  Account
-                </p>
-
-                <Link
-                  to="/profile"
-                  className={`flex items-center justify-between rounded-lg px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-900 ${
-                    location.pathname === "/profile"
-                      ? "bg-slate-100 text-indigo-600 dark:bg-slate-900/80 dark:text-indigo-300"
-                      : ""
-                  }`}
-                >
-                  <span>Profile</span>
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                    Edit
-                  </span>
-                </Link>
-
-                <Link
-                  to="/compiler"
-                  className={`flex items-center justify-between rounded-lg px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-900 ${
-                    location.pathname === "/compiler"
-                      ? "bg-slate-100 text-indigo-600 dark:bg-slate-900/80 dark:text-indigo-300"
-                      : ""
-                  }`}
-                >
-                  <span>Compiler</span>
-                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                    Sandbox
-                  </span>
-                </Link>
+              {/* BOTTOM: project workspace */}
+              <div className="mt-6 flex min-h-0 flex-1 flex-col">
+                {/* 👇 Wire the file-open handler into the workspace */}
+                <ProjectWorkspace onOpenFile={onOpenFile} />
               </div>
             </>
           )}

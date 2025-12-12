@@ -1,3 +1,4 @@
+// src/hooks/useCompiler.js
 import { useState } from "react";
 import { runCodeRequest } from "../api/compilerApi";
 
@@ -19,20 +20,34 @@ greet("World")`,
 int main() {
     printf("Hello, World!\\n");
     return 0;
-}`
+}`,
+  cpp: `#include <iostream>
+using namespace std;
+
+int main() {
+  cout << "Hello World!";
+  return 0;
+}`,
+  java: `public class Main {
+  public static void main(String[] args) {
+    System.out.println("Hello World!");
+  }
+}`,
 };
 
 export function useCompiler() {
+  // default state when you first open the app
   const [language, setLanguage] = useState("javascript");
   const [code, setCode] = useState(DEFAULT_CODE.javascript);
   const [stdin, setStdin] = useState("");
   const [output, setOutput] = useState("");
   const [isRunning, setIsRunning] = useState(false);
 
+  // language change should NOT reset code
   const handleLanguageChange = (e) => {
     const lang = e.target.value;
     setLanguage(lang);
-    setCode(DEFAULT_CODE[lang] || "");
+    // do NOT touch code here
   };
 
   const handleRun = async () => {
@@ -43,7 +58,7 @@ export function useCompiler() {
       const result = await runCodeRequest({
         language,
         code,
-        stdin
+        stdin,
       });
 
       const stdout = result.stdout || "";
@@ -69,7 +84,9 @@ export function useCompiler() {
     isRunning,
     setCode,
     setStdin,
+    setLanguage,
+    setOutput,            // 👈 expose this so CompilerPage can load saved output
     handleLanguageChange,
-    handleRun
+    handleRun,
   };
 }

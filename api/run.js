@@ -5,6 +5,8 @@ const LANGUAGE_MAP = {
   javascript: { language: "javascript", version: "18.15.0" },
   python: { language: "python", version: "3.10.0" },
   c: { language: "c", version: "10.2.0" },
+   cpp: { language: "cpp", version: "10.2.0" },
+  java: { language: "java", version: "15.0.2" },
 };
 
 module.exports = async (req, res) => {

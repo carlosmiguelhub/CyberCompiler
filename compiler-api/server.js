@@ -35,6 +35,8 @@ const LANGUAGE_MAP = {
     version: "10.2.0",
     fileName: "main.c",
   },
+   cpp: { language: "cpp", version: "10.2.0" },
+  java: { language: "java", version: "15.0.2" }
   // you can add more languages here later (cpp, java, etc.)
 };
 

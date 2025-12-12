@@ -8,6 +8,9 @@ function AppLayout({ children }) {
   const [isDark, setIsDark] = useState(true);
   const [profile, setProfile] = useState(null);
 
+  // 🔗 this will hold the "currently opened" file from the workspace
+  const [openedFile, setOpenedFile] = useState(null);
+
   useEffect(() => {
     fetchUserProfile()
       .then((data) => setProfile(data))
@@ -20,21 +23,24 @@ function AppLayout({ children }) {
 
   const toggleTheme = () => setIsDark((prev) => !prev);
 
+  // Inject common props into the active page (CompilerPage, ProfilePage, etc.)
   const childWithProps =
     React.isValidElement(children)
       ? React.cloneElement(children, {
           isDark,
           onToggleTheme: toggleTheme,
           profile,
+          // 👇 CompilerPage (and others) can read which file is opened
+          openedFile,
         })
       : children;
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-900 dark:text-slate-50 relative">
+    <div className="relative min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-900 dark:text-slate-50">
       {/* Mobile burger */}
       <button
         onClick={() => setIsSidebarOpen(true)}
-        className="z-30 fixed top-4 left-4 lg:hidden inline-flex items-center justify-center rounded-full border border-slate-300 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-100"
+        className="fixed left-4 top-4 z-30 inline-flex items-center justify-center rounded-full border border-slate-300 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-100 lg:hidden"
       >
         <span className="mr-1">Menu</span>
         ☰
@@ -56,6 +62,11 @@ function AppLayout({ children }) {
         profile={profile}
         isMobileOpen={isSidebarOpen}
         onMobileClose={() => setIsSidebarOpen(false)}
+        // 👇 when a file is clicked in ProjectWorkspace, update openedFile
+        onOpenFile={(payload) => {
+          // payload should be { projectId, file: { ... } }
+          setOpenedFile(payload);
+        }}
       />
     </div>
   );
