@@ -7,6 +7,9 @@ import CodeEditorPanel from "../components/compiler/CodeEditorPanel";
 import StdinPanel from "../components/compiler/StdinPanel";
 import OutputPanel from "../components/compiler/OutputPanel";
 
+// 🔹 NEW: import Firestore file update
+import { updateFileContent } from "../services/projectService";
+
 function getDefaultCodeForLanguage(lang) {
   switch ((lang || "").toLowerCase()) {
     case "c":
@@ -118,9 +121,8 @@ function exportFileToPdf({ filename, language, code, output }) {
 
   doc.setFont("courier", "normal");
   doc.setFontSize(9);
-  const outputText = output && output.trim().length > 0
-    ? output
-    : "(no output)";
+  const outputText =
+    output && output.trim().length > 0 ? output : "(no output)";
   const outputLines = doc.splitTextToSize(
     outputText,
     pageWidth - margin * 2
@@ -270,6 +272,27 @@ function CompilerPage({ isDark, onToggleTheme, openedFile }) {
     }
   }, [code, output, openedFile]);
 
+  // 🔹 NEW: autosave code to Firestore whenever it changes (debounced)
+  useEffect(() => {
+    if (!openedFile || !openedFile.file) return;
+    const { projectId, file } = openedFile;
+    if (!projectId || !file.id) return;
+
+    // Skip autosave if code is still undefined
+    if (typeof code !== "string") return;
+
+    const timeoutId = setTimeout(() => {
+      updateFileContent(projectId, file.id, {
+        content: code ?? "",
+        language: language || file.language || "text",
+      }).catch((err) => {
+        console.error("Failed to save file to Firestore:", err);
+      });
+    }, 800); // 0.8s debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [code, language, openedFile]);
+
   // 🔹 Export handler
   const handleExportPdf = () => {
     if (!openedFile || !openedFile.file) {
@@ -301,7 +324,7 @@ function CompilerPage({ isDark, onToggleTheme, openedFile }) {
             onRun={handleRun}
             isDark={isDark}
             onToggleTheme={onToggleTheme}
-            onExportPdf={handleExportPdf} // 👈 NEW
+            onExportPdf={handleExportPdf}
           />
         </div>
 

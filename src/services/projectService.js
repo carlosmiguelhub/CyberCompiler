@@ -1,113 +1,141 @@
-import { db, auth } from "../firebase";
+// src/services/projectService.js
+import { auth, db } from "../firebase";
 import {
   collection,
   doc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
   getDocs,
-  onSnapshot,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 
-// Get base path for the signed-in user
-function userProjectsRef() {
-  const uid = auth.currentUser?.uid;
-  if (!uid) throw new Error("User not logged in");
-  return collection(db, "users", uid, "projects");
+// Make sure user is logged in
+function requireUser() {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("User not authenticated");
+  }
+  return user;
 }
 
-// Create a new project
+// Helper to get projects collection for current user
+function getProjectsCollection() {
+  const user = requireUser();
+  return collection(db, "users", user.uid, "projects");
+}
+
+// Helper to get files subcollection for a project
+function getFilesCollection(projectId) {
+  const user = requireUser();
+  return collection(db, "users", user.uid, "projects", projectId, "files");
+}
+
+/**
+ * Load all projects + their files for the current user.
+ * Returns: [{ id, name, files:[{id, filename, language}] }]
+ */
+export async function fetchProjectsWithFiles() {
+  const projectsCol = getProjectsCollection();
+  const projSnap = await getDocs(projectsCol);
+
+  const projects = [];
+
+  for (const projDoc of projSnap.docs) {
+    const projData = projDoc.data();
+    const project = {
+      id: projDoc.id,
+      name: projData.name || "Untitled",
+      files: [],
+    };
+
+    const filesCol = getFilesCollection(projDoc.id);
+    const filesSnap = await getDocs(filesCol);
+    project.files = filesSnap.docs.map((fileDoc) => {
+      const f = fileDoc.data();
+      return {
+        id: fileDoc.id,
+        filename: f.filename || "untitled.txt",
+        language: f.language || "text",
+      };
+    });
+
+    projects.push(project);
+  }
+
+  return projects;
+}
+
+/**
+ * Create a new project for current user.
+ * Returns: { id, name, files: [] }
+ */
 export async function createProject(name) {
-  const ref = doc(userProjectsRef());
-  await setDoc(ref, {
+  const projectsCol = getProjectsCollection();
+  const docRef = await addDoc(projectsCol, {
     name,
-    createdAt: Date.now(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
-  return ref.id;
+
+  return {
+    id: docRef.id,
+    name,
+    files: [],
+  };
 }
 
-// Delete a project
+/**
+ * Delete a project and all its files.
+ */
 export async function deleteProject(projectId) {
-  await deleteDoc(doc(userProjectsRef(), projectId));
+  const projRef = doc(getProjectsCollection(), projectId);
+
+  // delete files in subcollection
+  const filesCol = getFilesCollection(projectId);
+  const filesSnap = await getDocs(filesCol);
+  await Promise.all(filesSnap.docs.map((f) => deleteDoc(f.ref)));
+
+  // delete project doc itself
+  await deleteDoc(projRef);
 }
 
-// Create a file inside a project
-export async function createFile(projectId, { filename, language }) {
-  const filesRef = collection(
-    db,
-    "users",
-    auth.currentUser.uid,
-    "projects",
-    projectId,
-    "files"
-  );
-
-  const fileRef = doc(filesRef);
-
-  await setDoc(fileRef, {
+/**
+ * Create a file inside a project.
+ * Returns: { id, filename, language }
+ */
+export async function createFile(projectId, filename, language) {
+  const filesCol = getFilesCollection(projectId);
+  const docRef = await addDoc(filesCol, {
     filename,
     language,
-    content: "",
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
 
-  return fileRef.id;
+  return {
+    id: docRef.id,
+    filename,
+    language,
+  };
 }
 
-// Save file content
-export async function saveFile(projectId, fileId, content) {
-  const fileRef = doc(
-    db,
-    "users",
-    auth.currentUser.uid,
-    "projects",
-    projectId,
-    "files",
-    fileId
-  );
+/**
+ * Delete a file from a project.
+ */
+export async function deleteFile(projectId, fileId) {
+  const fileRef = doc(getFilesCollection(projectId), fileId);
+  await deleteDoc(fileRef);
+}
 
+/**
+ * (for later) Update file content / metadata in Firestore.
+ * We’re not using this yet in the UI, but it’s ready.
+ */
+export async function updateFileContent(projectId, fileId, data) {
+  const fileRef = doc(getFilesCollection(projectId), fileId);
   await updateDoc(fileRef, {
-    content,
-    updatedAt: Date.now(),
-  });
-}
-
-// Real-time listener for projects + files
-export function subscribeToProjects(callback) {
-  const ref = userProjectsRef();
-
-  return onSnapshot(ref, async (projectsSnap) => {
-    const projects = [];
-
-    for (const projectDoc of projectsSnap.docs) {
-      const projectId = projectDoc.id;
-      const projectData = projectDoc.data();
-
-      // Fetch files inside each project
-      const filesSnap = await getDocs(
-        collection(
-          db,
-          "users",
-          auth.currentUser.uid,
-          "projects",
-          projectId,
-          "files"
-        )
-      );
-
-      const files = filesSnap.docs.map((fileDoc) => ({
-        id: fileDoc.id,
-        ...fileDoc.data(),
-      }));
-
-      projects.push({
-        id: projectId,
-        ...projectData,
-        files,
-      });
-    }
-
-    callback(projects);
+    ...data,
+    updatedAt: serverTimestamp(),
   });
 }

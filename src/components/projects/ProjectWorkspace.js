@@ -2,86 +2,18 @@ import { useState, useEffect } from "react";
 import { HiFolder, HiOutlinePlusSm } from "react-icons/hi";
 import { HiDocumentText, HiTrash } from "react-icons/hi2";
 
-const LOCAL_STORAGE_KEY = "cybercompile_projects_v1";
-
-const initialProjects = [
-  {
-    id: "proj-1",
-    name: "Computer Programming 1",
-    files: [
-      {
-        id: "file-1",
-        filename: "hello_world.c",
-        language: "c",
-        content: `#include <stdio.h>
-
-int main() {
-    printf("Hello, world!\\n");
-    return 0;
-}
-`,
-      },
-      {
-        id: "file-2",
-        filename: "loops.java",
-        language: "java",
-        content: `public class Loops {
-    public static void main(String[] args) {
-        for (int i = 0; i < 5; i++) {
-            System.out.println("i = " + i);
-        }
-    }
-}
-`,
-      },
-    ],
-    isOpen: true,
-  },
-  {
-    id: "proj-2",
-    name: "Data Structures",
-    files: [
-      {
-        id: "file-3",
-        filename: "stack.cpp",
-        language: "cpp",
-        content: `#include <iostream>
-#include <stack>
-using namespace std;
-
-int main() {
-    stack<int> s;
-    s.push(1);
-    s.push(2);
-    cout << "Top: " << s.top() << endl;
-    return 0;
-}
-`,
-      },
-    ],
-    isOpen: false,
-  },
-];
+import {
+  fetchProjectsWithFiles,
+  createProject,
+  deleteProject,
+  createFile,
+  deleteFile,
+} from "../../services/projectService"; // ⬅️ adjust path if needed
 
 function ProjectWorkspace({ onOpenFile }) {
-  // ✅ Load from localStorage synchronously on first render
-  const [projects, setProjects] = useState(() => {
-    if (typeof window === "undefined") return initialProjects;
-
-    try {
-      const stored = window.localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
-      }
-    } catch (err) {
-      console.error("Failed to parse projects from localStorage:", err);
-    }
-
-    return initialProjects;
-  });
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   // Modal state
   const [modal, setModal] = useState({
@@ -93,14 +25,39 @@ function ProjectWorkspace({ onOpenFile }) {
   const [projectNameInput, setProjectNameInput] = useState("");
   const [fileNameInput, setFileNameInput] = useState("");
 
-  // ✅ Save to localStorage whenever projects change
+  // ✅ Load from Firestore on mount
   useEffect(() => {
-    try {
-      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(projects));
-    } catch (err) {
-      console.error("Failed to save projects to localStorage:", err);
+    let isMounted = true;
+
+    async function load() {
+      try {
+        setLoading(true);
+        setError("");
+        const data = await fetchProjectsWithFiles();
+
+        if (!isMounted) return;
+
+        // Make all projects closed or first open – here we open all
+        const withOpenFlag = data.map((p) => ({
+          ...p,
+          isOpen: true,
+        }));
+        setProjects(withOpenFlag);
+      } catch (err) {
+        console.error("Failed to load projects:", err);
+        if (!isMounted) return;
+        setError("Failed to load your workspaces.");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     }
-  }, [projects]);
+
+    load();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const toggleProject = (id) => {
     setProjects((prev) =>
@@ -116,19 +73,25 @@ function ProjectWorkspace({ onOpenFile }) {
     setModal({ type: "addProject", projectId: null, fileId: null });
   };
 
-  const confirmAddProject = () => {
+  const confirmAddProject = async () => {
     const name = projectNameInput.trim();
     if (!name) return;
 
-    const newProject = {
-      id: `proj-${Date.now()}`,
-      name,
-      files: [],
-      isOpen: true,
-    };
-
-    setProjects((prev) => [...prev, newProject]);
-    closeModal();
+    try {
+      const newProj = await createProject(name);
+      setProjects((prev) => [
+        ...prev,
+        {
+          ...newProj,
+          files: [],
+          isOpen: true,
+        },
+      ]);
+      closeModal();
+    } catch (err) {
+      console.error("Failed to create project:", err);
+      alert("Failed to create workspace. Please try again.");
+    }
   };
 
   // ---- Add file ----
@@ -137,32 +100,37 @@ function ProjectWorkspace({ onOpenFile }) {
     setModal({ type: "addFile", projectId, fileId: null });
   };
 
-  const confirmAddFile = () => {
+  const confirmAddFile = async () => {
     const filename = fileNameInput.trim();
     if (!filename || !modal.projectId) return;
 
     const languageGuess = guessLanguageFromFilename(filename);
+    const defaultContent = getDefaultCodeForLanguage(languageGuess);
 
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.id === modal.projectId
-          ? {
-              ...p,
-              files: [
-                ...p.files,
-                {
-                  id: `file-${Date.now()}`,
-                  filename,
-                  language: languageGuess,
-                  content: getDefaultCodeForLanguage(languageGuess),
-                },
-              ],
-            }
-          : p
-      )
-    );
+    try {
+      const newFile = await createFile(
+        modal.projectId,
+        filename,
+        languageGuess,
+        defaultContent
+      );
 
-    closeModal();
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === modal.projectId
+            ? {
+                ...p,
+                files: [...p.files, newFile],
+              }
+            : p
+        )
+      );
+
+      closeModal();
+    } catch (err) {
+      console.error("Failed to create file:", err);
+      alert("Failed to create file. Please try again.");
+    }
   };
 
   // ---- Delete project ----
@@ -170,10 +138,17 @@ function ProjectWorkspace({ onOpenFile }) {
     setModal({ type: "deleteProject", projectId, fileId: null });
   };
 
-  const confirmDeleteProject = () => {
+  const confirmDeleteProject = async () => {
     if (!modal.projectId) return;
-    setProjects((prev) => prev.filter((p) => p.id !== modal.projectId));
-    closeModal();
+
+    try {
+      await deleteProject(modal.projectId);
+      setProjects((prev) => prev.filter((p) => p.id !== modal.projectId));
+      closeModal();
+    } catch (err) {
+      console.error("Failed to delete project:", err);
+      alert("Failed to delete workspace. Please try again.");
+    }
   };
 
   // ---- Delete file ----
@@ -181,22 +156,27 @@ function ProjectWorkspace({ onOpenFile }) {
     setModal({ type: "deleteFile", projectId, fileId });
   };
 
-  const confirmDeleteFile = () => {
+  const confirmDeleteFile = async () => {
     const { projectId, fileId } = modal;
     if (!projectId || !fileId) return;
 
-    setProjects((prev) =>
-      prev.map((p) =>
-        p.id === projectId
-          ? {
-              ...p,
-              files: p.files.filter((f) => f.id !== fileId),
-            }
-          : p
-      )
-    );
-
-    closeModal();
+    try {
+      await deleteFile(projectId, fileId);
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId
+            ? {
+                ...p,
+                files: p.files.filter((f) => f.id !== fileId),
+              }
+            : p
+        )
+      );
+      closeModal();
+    } catch (err) {
+      console.error("Failed to delete file:", err);
+      alert("Failed to delete file. Please try again.");
+    }
   };
 
   const closeModal = () => {
@@ -239,9 +219,21 @@ function ProjectWorkspace({ onOpenFile }) {
           </button>
         </header>
 
+        {/* Status */}
+        {loading && (
+          <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-500">
+            Loading your workspaces...
+          </p>
+        )}
+        {error && !loading && (
+          <p className="mt-2 text-center text-[11px] text-red-500">
+            {error}
+          </p>
+        )}
+
         {/* List */}
         <div className="mt-1 flex-1 space-y-1 overflow-y-auto pr-1">
-          {projects.length === 0 ? (
+          {!loading && projects.length === 0 ? (
             <p className="mt-4 text-center text-[11px] text-slate-400 dark:text-slate-500">
               No projects yet. Click <span className="font-semibold">New</span> to
               create one.
