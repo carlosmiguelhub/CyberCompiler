@@ -1,5 +1,6 @@
+// src/components/projects/ProjectWorkspace.jsx
 import { useState, useEffect } from "react";
-import { HiFolder, HiOutlinePlusSm } from "react-icons/hi";
+import { HiFolder, HiOutlinePlusSm, HiPencilAlt } from "react-icons/hi";
 import { HiDocumentText, HiTrash } from "react-icons/hi2";
 
 import {
@@ -8,7 +9,12 @@ import {
   deleteProject,
   createFile,
   deleteFile,
-} from "../../services/projectService"; // ⬅️ adjust path if needed
+  renameProject,
+  renameFile,
+} from "../../services/projectService";
+
+import { auth, db } from "../../firebase";
+import { collection, onSnapshot } from "firebase/firestore";
 
 function ProjectWorkspace({ onOpenFile }) {
   const [projects, setProjects] = useState([]);
@@ -17,7 +23,7 @@ function ProjectWorkspace({ onOpenFile }) {
 
   // Modal state
   const [modal, setModal] = useState({
-    type: null, // 'addProject' | 'addFile' | 'deleteProject' | 'deleteFile'
+    type: null, // 'addProject' | 'addFile' | 'deleteProject' | 'deleteFile' | 'renameProject' | 'renameFile'
     projectId: null,
     fileId: null,
   });
@@ -25,19 +31,20 @@ function ProjectWorkspace({ onOpenFile }) {
   const [projectNameInput, setProjectNameInput] = useState("");
   const [fileNameInput, setFileNameInput] = useState("");
 
-  // ✅ Load from Firestore on mount
+  // ✅ Load from Firestore + subscribe for realtime
   useEffect(() => {
     let isMounted = true;
+    let unsubscribe = null;
 
-    async function load() {
+    const load = async () => {
       try {
+        if (!isMounted) return;
         setLoading(true);
         setError("");
-        const data = await fetchProjectsWithFiles();
 
+        const data = await fetchProjectsWithFiles();
         if (!isMounted) return;
 
-        // Make all projects closed or first open – here we open all
         const withOpenFlag = data.map((p) => ({
           ...p,
           isOpen: true,
@@ -50,12 +57,31 @@ function ProjectWorkspace({ onOpenFile }) {
       } finally {
         if (isMounted) setLoading(false);
       }
-    }
+    };
 
-    load();
+    const init = async () => {
+      await load();
+
+      try {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        const projectsCol = collection(db, "users", user.uid, "projects");
+
+        // 🔁 Re-run `load()` whenever anything about projects (or their updatedAt) changes
+        unsubscribe = onSnapshot(projectsCol, () => {
+          load();
+        });
+      } catch (err) {
+        console.error("Failed to subscribe to projects:", err);
+      }
+    };
+
+    init();
 
     return () => {
       isMounted = false;
+      if (unsubscribe) unsubscribe();
     };
   }, []);
 
@@ -91,6 +117,30 @@ function ProjectWorkspace({ onOpenFile }) {
     } catch (err) {
       console.error("Failed to create project:", err);
       alert("Failed to create workspace. Please try again.");
+    }
+  };
+
+  // ---- Rename project ----
+  const openRenameProjectModal = (project) => {
+    setProjectNameInput(project.name || "");
+    setModal({ type: "renameProject", projectId: project.id, fileId: null });
+  };
+
+  const confirmRenameProject = async () => {
+    const name = projectNameInput.trim();
+    if (!name || !modal.projectId) return;
+
+    try {
+      await renameProject(modal.projectId, name);
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === modal.projectId ? { ...p, name } : p
+        )
+      );
+      closeModal();
+    } catch (err) {
+      console.error("Failed to rename project:", err);
+      alert("Failed to rename workspace. Please try again.");
     }
   };
 
@@ -130,6 +180,38 @@ function ProjectWorkspace({ onOpenFile }) {
     } catch (err) {
       console.error("Failed to create file:", err);
       alert("Failed to create file. Please try again.");
+    }
+  };
+
+  // ---- Rename file ----
+  const openRenameFileModal = (projectId, file) => {
+    setFileNameInput(file.filename || "");
+    setModal({ type: "renameFile", projectId, fileId: file.id });
+  };
+
+  const confirmRenameFile = async () => {
+    const filename = fileNameInput.trim();
+    const { projectId, fileId } = modal;
+    if (!filename || !projectId || !fileId) return;
+
+    try {
+      await renameFile(projectId, fileId, filename);
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === projectId
+            ? {
+                ...p,
+                files: p.files.map((f) =>
+                  f.id === fileId ? { ...f, filename } : f
+                ),
+              }
+            : p
+        )
+      );
+      closeModal();
+    } catch (err) {
+      console.error("Failed to rename file:", err);
+      alert("Failed to rename file. Please try again.");
     }
   };
 
@@ -267,6 +349,16 @@ function ProjectWorkspace({ onOpenFile }) {
                     </div>
                   </button>
 
+                  {/* Rename project */}
+                  <button
+                    type="button"
+                    onClick={() => openRenameProjectModal(project)}
+                    className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                    title="Rename workspace"
+                  >
+                    <HiPencilAlt className="h-3.5 w-3.5" />
+                  </button>
+
                   {/* Delete project */}
                   <button
                     type="button"
@@ -295,6 +387,16 @@ function ProjectWorkspace({ onOpenFile }) {
                           <span className="rounded-full bg-slate-100 px-1.5 py-[1px] text-[10px] uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
                             {file.language}
                           </span>
+                        </button>
+
+                        {/* Rename file */}
+                        <button
+                          type="button"
+                          onClick={() => openRenameFileModal(project.id, file)}
+                          className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                          title="Rename file"
+                        >
+                          <HiPencilAlt className="h-3.5 w-3.5" />
                         </button>
 
                         {/* Delete file */}
@@ -334,16 +436,26 @@ function ProjectWorkspace({ onOpenFile }) {
       {modal.type && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 text-xs shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-            {/* Title & description per modal type */}
-            {modal.type === "addProject" && (
+            {/* Add / Rename Project */}
+            {(modal.type === "addProject" || modal.type === "renameProject") && (
               <>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                  Create new workspace / subject
+                  {modal.type === "addProject"
+                    ? "Create new workspace / subject"
+                    : "Rename workspace"}
                 </h3>
                 <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  Give your workspace a clear name. Example:
-                  <span className="font-semibold"> "Computer Programming 1"</span> or
-                  <span className="font-semibold"> "Data Structures Lab"</span>.
+                  {modal.type === "addProject"
+                    ? <>
+                        Give your workspace a clear name. Example:
+                        <span className="font-semibold">
+                          {" "}
+                          "Computer Programming 1"
+                        </span>{" "}
+                        or
+                        <span className="font-semibold"> "Data Structures Lab"</span>.
+                      </>
+                    : "Update the workspace name to something more descriptive."}
                 </p>
 
                 <label className="mt-4 block text-[11px] font-medium text-slate-700 dark:text-slate-300">
@@ -367,19 +479,26 @@ function ProjectWorkspace({ onOpenFile }) {
                   </button>
                   <button
                     type="button"
-                    onClick={confirmAddProject}
+                    onClick={
+                      modal.type === "addProject"
+                        ? confirmAddProject
+                        : confirmRenameProject
+                    }
                     className="rounded-full bg-indigo-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-indigo-700"
                   >
-                    Create workspace
+                    {modal.type === "addProject"
+                      ? "Create workspace"
+                      : "Save name"}
                   </button>
                 </div>
               </>
             )}
 
-            {modal.type === "addFile" && (
+            {/* Add / Rename File */}
+            {(modal.type === "addFile" || modal.type === "renameFile") && (
               <>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                  Create new file
+                  {modal.type === "addFile" ? "Create new file" : "Rename file"}
                 </h3>
                 <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                   Use a descriptive file name with the correct extension so we can
@@ -404,8 +523,7 @@ function ProjectWorkspace({ onOpenFile }) {
                 <p className="mt-2 text-[10px] text-slate-400 dark:text-slate-500">
                   Tip: Your instructor might ask you to submit exactly named files
                   like <span className="font-mono">hello.c</span> or{" "}
-                  <span className="font-mono">activity1.py</span>. Match their
-                  required filename here so you can export and submit later.
+                  <span className="font-mono">activity1.py</span>.
                 </p>
 
                 <div className="mt-5 flex justify-end gap-2">
@@ -418,10 +536,14 @@ function ProjectWorkspace({ onOpenFile }) {
                   </button>
                   <button
                     type="button"
-                    onClick={confirmAddFile}
+                    onClick={
+                      modal.type === "addFile"
+                        ? confirmAddFile
+                        : confirmRenameFile
+                    }
                     className="rounded-full bg-indigo-600 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-indigo-700"
                   >
-                    Create file
+                    {modal.type === "addFile" ? "Create file" : "Save name"}
                   </button>
                 </div>
               </>
@@ -463,8 +585,8 @@ function ProjectWorkspace({ onOpenFile }) {
                 </h3>
                 <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                   This will remove the file from this workspace. Make sure you
-                  don&apos;t need the code anymore or have it exported as PDF or
-                  text before deleting.
+                  don&apos;t need the code anymore or have it exported before
+                  deleting.
                 </p>
 
                 <div className="mt-5 flex justify-end gap-2">

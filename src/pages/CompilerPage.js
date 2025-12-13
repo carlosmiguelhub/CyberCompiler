@@ -6,8 +6,6 @@ import CompilerHeader from "../components/compiler/CompilerHeader";
 import CodeEditorPanel from "../components/compiler/CodeEditorPanel";
 import StdinPanel from "../components/compiler/StdinPanel";
 import OutputPanel from "../components/compiler/OutputPanel";
-
-// 🔹 NEW: import Firestore file update
 import { updateFileContent } from "../services/projectService";
 
 function getDefaultCodeForLanguage(lang) {
@@ -48,7 +46,7 @@ int main() {
   }
 }
 
-// 🔹 Helper: nicely formatted PDF (Academic style)
+// PDF export helper
 function exportFileToPdf({ filename, language, code, output }) {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const margin = 48;
@@ -76,7 +74,7 @@ function exportFileToPdf({ filename, language, code, output }) {
   doc.text(`Exported: ${exportDate}`, margin, y);
   y += 24;
 
-  // Section: Source Code
+  // Source Code
   if (y > pageHeight - margin) {
     doc.addPage();
     y = margin;
@@ -105,10 +103,8 @@ function exportFileToPdf({ filename, language, code, output }) {
     y += 12;
   });
 
-  // Space before output section
+  // Program Output
   y += 18;
-
-  // Section: Program Output
   if (y > pageHeight - margin) {
     doc.addPage();
     y = margin;
@@ -128,31 +124,23 @@ function exportFileToPdf({ filename, language, code, output }) {
     pageWidth - margin * 2
   );
 
-  // Draw a light box around the output area for "console" feel
   const boxTop = y - 12;
   const boxLeft = margin - 6;
   const boxWidth = pageWidth - margin * 2 + 12;
-
-  // We don't know final height yet; so we will draw line-by-line and then a border
   let boxBottom = boxTop;
 
   outputLines.forEach((line) => {
     if (y > pageHeight - margin) {
-      // close previous box
       doc.rect(
         boxLeft,
         boxTop,
         boxWidth,
         boxBottom - boxTop + 12
       );
-
-      // new page
       doc.addPage();
       y = margin;
       doc.setFont("courier", "normal");
       doc.setFontSize(9);
-
-      // reset box for new page
       const newBoxTop = y - 12;
       boxBottom = newBoxTop;
     }
@@ -162,7 +150,6 @@ function exportFileToPdf({ filename, language, code, output }) {
     y += 12;
   });
 
-  // Draw final box for output
   doc.rect(
     boxLeft,
     boxTop,
@@ -192,14 +179,13 @@ function CompilerPage({ isDark, onToggleTheme, openedFile }) {
 
   const editorTheme = isDark ? "vs-dark" : "light";
 
-  // just for showing the file name in the editor header
   const [activeFilename, setActiveFilename] = useState(null);
+  const [saveStatus, setSaveStatus] = useState("Saved");
 
-  // build a unique key per file for localStorage
   const getStorageKeyForFile = (projectId, fileId) =>
     `cybercompile_file_${projectId}_${fileId}`;
 
-  // 🔹 When user clicks a file: load its code + last output
+  // When user clicks a file: load its code + last output
   useEffect(() => {
     if (!openedFile || !openedFile.file) return;
 
@@ -230,7 +216,6 @@ function CompilerPage({ isDark, onToggleTheme, openedFile }) {
           initialOutput = "";
         }
       } else {
-        // first time opening this file
         initialCode =
           file.content && file.content.trim() !== ""
             ? file.content
@@ -244,16 +229,13 @@ function CompilerPage({ isDark, onToggleTheme, openedFile }) {
     }
 
     setActiveFilename(file.filename || null);
-
-    // set language for header + runner
     setLanguage(fileLang);
-
-    // ⛔ only when openedFile changes
     setCode(initialCode);
     setOutput(initialOutput);
+    setSaveStatus("Saved");
   }, [openedFile, setLanguage, setCode, setOutput]);
 
-  // 🔹 Save code + output to localStorage whenever they change
+  // Save code + output to localStorage
   useEffect(() => {
     if (!openedFile || !openedFile.file) return;
 
@@ -272,28 +254,33 @@ function CompilerPage({ isDark, onToggleTheme, openedFile }) {
     }
   }, [code, output, openedFile]);
 
-  // 🔹 NEW: autosave code to Firestore whenever it changes (debounced)
+  // 🔹 Autosave code to Firestore with status indicator
   useEffect(() => {
     if (!openedFile || !openedFile.file) return;
     const { projectId, file } = openedFile;
     if (!projectId || !file.id) return;
-
-    // Skip autosave if code is still undefined
     if (typeof code !== "string") return;
 
+    setSaveStatus("Editing…");
+
     const timeoutId = setTimeout(() => {
+      setSaveStatus("Saving…");
       updateFileContent(projectId, file.id, {
         content: code ?? "",
         language: language || file.language || "text",
-      }).catch((err) => {
-        console.error("Failed to save file to Firestore:", err);
-      });
-    }, 800); // 0.8s debounce
+      })
+        .then(() => {
+          setSaveStatus("Saved");
+        })
+        .catch((err) => {
+          console.error("Failed to save file to Firestore:", err);
+          setSaveStatus("Error");
+        });
+    }, 800);
 
     return () => clearTimeout(timeoutId);
   }, [code, language, openedFile]);
 
-  // 🔹 Export handler
   const handleExportPdf = () => {
     if (!openedFile || !openedFile.file) {
       alert("Please select a file from the workspace first.");
@@ -311,21 +298,38 @@ function CompilerPage({ isDark, onToggleTheme, openedFile }) {
     });
   };
 
+  const statusDotClass =
+    saveStatus === "Saved"
+      ? "bg-emerald-500"
+      : saveStatus === "Saving…"
+      ? "bg-amber-500"
+      : saveStatus === "Error"
+      ? "bg-red-500"
+      : "bg-slate-400";
+
   return (
-    <div className="w-full bg-transparent text-slate-900 transition-colors duration-300 dark:text-slate-50">
-      {/* Shell card */}
-      <div className="flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 backdrop-blur transition-colors duration-300 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-slate-950/60">
+    <div className="flex h-full w-full flex-col bg-transparent text-slate-900 transition-colors duration-300 dark:text-slate-50">
+      <div className="flex-1 overflow-auto rounded-2xl border border-slate-200 bg-white/95 shadow-xl shadow-slate-900/5 backdrop-blur transition-colors duration-300 dark:border-slate-800 dark:bg-slate-950/90 dark:shadow-slate-950/60">
         {/* Header */}
         <div className="border-b border-slate-200 px-3 py-2.5 dark:border-slate-800 sm:px-4 sm:py-3">
-          <CompilerHeader
-            language={language}
-            isRunning={isRunning}
-            onLanguageChange={handleLanguageChange}
-            onRun={handleRun}
-            isDark={isDark}
-            onToggleTheme={onToggleTheme}
-            onExportPdf={handleExportPdf}
-          />
+          <div className="flex items-center justify-between gap-3">
+            <CompilerHeader
+              language={language}
+              isRunning={isRunning}
+              onLanguageChange={handleLanguageChange}
+              onRun={handleRun}
+              isDark={isDark}
+              onToggleTheme={onToggleTheme}
+              onExportPdf={handleExportPdf}
+            />
+            {/* Saving indicator (hidden on tiny screens if you want) */}
+            <div className="hidden items-center gap-2 text-[11px] text-slate-400 sm:flex">
+              <span
+                className={`h-2 w-2 rounded-full ${statusDotClass}`}
+              />
+              <span>{saveStatus}</span>
+            </div>
+          </div>
         </div>
 
         {/* Content */}

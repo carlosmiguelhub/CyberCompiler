@@ -33,7 +33,7 @@ function getFilesCollection(projectId) {
 
 /**
  * Load all projects + their files for the current user.
- * Returns: [{ id, name, files:[{id, filename, language}] }]
+ * Returns: [{ id, name, files:[{id, filename, language, content}] }]
  */
 export async function fetchProjectsWithFiles() {
   const projectsCol = getProjectsCollection();
@@ -57,6 +57,7 @@ export async function fetchProjectsWithFiles() {
         id: fileDoc.id,
         filename: f.filename || "untitled.txt",
         language: f.language || "text",
+        content: f.content || "",
       };
     });
 
@@ -86,6 +87,17 @@ export async function createProject(name) {
 }
 
 /**
+ * Rename a project (workspace).
+ */
+export async function renameProject(projectId, name) {
+  const projRef = doc(getProjectsCollection(), projectId);
+  await updateDoc(projRef, {
+    name,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/**
  * Delete a project and all its files.
  */
 export async function deleteProject(projectId) {
@@ -102,22 +114,43 @@ export async function deleteProject(projectId) {
 
 /**
  * Create a file inside a project.
- * Returns: { id, filename, language }
+ * Returns: { id, filename, language, content }
  */
-export async function createFile(projectId, filename, language) {
+export async function createFile(projectId, filename, language, content = "") {
   const filesCol = getFilesCollection(projectId);
   const docRef = await addDoc(filesCol, {
     filename,
     language,
+    content,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  // bump parent project's updatedAt (for realtime)
+  const projRef = doc(getProjectsCollection(), projectId);
+  await updateDoc(projRef, { updatedAt: serverTimestamp() });
 
   return {
     id: docRef.id,
     filename,
     language,
+    content,
   };
+}
+
+/**
+ * Rename a file (and optionally adjust language if you want later).
+ */
+export async function renameFile(projectId, fileId, filename) {
+  const fileRef = doc(getFilesCollection(projectId), fileId);
+  await updateDoc(fileRef, {
+    filename,
+    updatedAt: serverTimestamp(),
+  });
+
+  // bump parent project's updatedAt (for realtime)
+  const projRef = doc(getProjectsCollection(), projectId);
+  await updateDoc(projRef, { updatedAt: serverTimestamp() });
 }
 
 /**
@@ -126,11 +159,15 @@ export async function createFile(projectId, filename, language) {
 export async function deleteFile(projectId, fileId) {
   const fileRef = doc(getFilesCollection(projectId), fileId);
   await deleteDoc(fileRef);
+
+  // bump parent project's updatedAt (for realtime)
+  const projRef = doc(getProjectsCollection(), projectId);
+  await updateDoc(projRef, { updatedAt: serverTimestamp() });
 }
 
 /**
- * (for later) Update file content / metadata in Firestore.
- * We’re not using this yet in the UI, but it’s ready.
+ * Update file content / metadata in Firestore.
+ * Example: updateFileContent(pid, fid, { content: "...", language: "c" })
  */
 export async function updateFileContent(projectId, fileId, data) {
   const fileRef = doc(getFilesCollection(projectId), fileId);
@@ -138,4 +175,8 @@ export async function updateFileContent(projectId, fileId, data) {
     ...data,
     updatedAt: serverTimestamp(),
   });
+
+  // bump parent project's updatedAt (for realtime)
+  const projRef = doc(getProjectsCollection(), projectId);
+  await updateDoc(projRef, { updatedAt: serverTimestamp() });
 }
