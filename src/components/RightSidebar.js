@@ -44,13 +44,7 @@ function RightSidebar({
         `}
       >
         {/* Desktop collapse button */}
-        <button
-          type="button"
-          onClick={() => setIsCollapsed((prev) => !prev)}
-          className="hidden lg:flex absolute -left-4 top-4 z-50 h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-xs text-slate-700 shadow-md hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-900"
-        >
-          {isCollapsed ? "‹" : "›"}
-        </button>
+       
 
         {/* Mobile close button */}
         <button
