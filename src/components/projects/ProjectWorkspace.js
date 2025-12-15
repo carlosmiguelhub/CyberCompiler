@@ -2,7 +2,6 @@
 import { useState, useEffect } from "react";
 import { HiFolder, HiOutlinePlusSm, HiPencilAlt } from "react-icons/hi";
 import { HiDocumentText, HiTrash } from "react-icons/hi2";
-
 import {
   fetchProjectsWithFiles,
   createProject,
@@ -12,7 +11,6 @@ import {
   renameProject,
   renameFile,
 } from "../../services/projectService";
-
 import { auth, db } from "../../firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 
